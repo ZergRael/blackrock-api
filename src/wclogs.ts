@@ -41,15 +41,6 @@ async function getBuffsAndConsummables(code: String) {
               startTime
               endTime
             }
-            masterData {
-              actors(type: "Player") {
-                id
-                name
-                icon
-                type
-                subType
-              }
-            }
           }
         }
       }
@@ -58,16 +49,6 @@ async function getBuffsAndConsummables(code: String) {
       code,
     }
   );
-
-  const actors = report.reportData.report.masterData.actors;
-  // log.debug(actors);
-  // const actorsMap = utils.arrToMap(
-  //   actors,
-  //   "id"
-  // );
-  // log.debug(actorsMap);
-
-  log.debug(`Got ${actors.length} actors`);
 
   const fights = report.reportData.report.fights;
   // log.debug(fights);
@@ -84,11 +65,7 @@ async function getBuffsAndConsummables(code: String) {
 
   const buffs = await gc.request(
     gql`
-      query getBuffs(
-        $code: String!
-        $startTime: Float!
-        $endTime: Float! # $abilityID: Float!
-      ) {
+      query getBuffs($code: String!, $startTime: Float!, $endTime: Float!) {
         reportData {
           report(code: $code) {
             ony: table(
@@ -253,48 +230,58 @@ async function getBuffsAndConsummables(code: String) {
       code,
       startTime,
       endTime,
-      // abilityId: 24425,
     }
   );
 
   const buffTypes = buffs.reportData.report;
-  // log.debug(buffTypes);
 
-  // for (let buffType in buffTypes) {
-  //   const auras = buffTypes[buffType].data.auras;
-  //   log.debug(buffType, auras);
-  // }
-
-  const buffsByActors = [];
-  for (let a of actors) {
-    const buffsByActor = [];
-    for (let f of fights) {
-      const buffsByFight = [];
-      for (let buffType in buffTypes) {
-        const auras = buffTypes[buffType].data.auras.find((e) => e.id == a.id);
-        if (!auras) {
+  const actors = [];
+  for (let f of fights) {
+    // Get fight start & endtime
+    for (let buffType in buffTypes) {
+      const auras = buffTypes[buffType].data.auras;
+      for (let a of auras) {
+        if (a.type == "Pet") {
           continue;
         }
 
         let count = 0;
-        for (let band of auras.bands) {
+        for (let band of a.bands) {
           if (band.startTime >= f.startTime && band.endTime <= f.endTime) {
             ++count;
           }
         }
 
         if (count > 0) {
-          buffsByFight.push({ b: buffType, c: count });
+          let actor = actors.find((e) => e.id == a.id);
+          if (!actor) {
+            actor = {
+              name: a.name,
+              id: a.id,
+              guid: a.guid,
+              type: a.type,
+              icon: a.icon,
+              fights: [],
+            };
+            actors.push(actor);
+          }
+
+          let fight = actor.fights.find((e) => e.id == f.id);
+          if (!fight) {
+            fight = {
+              id: f.id,
+              buffs: [],
+            };
+            actor.fights.push(fight);
+          }
+
+          fight.buffs.push({ b: buffType, c: count });
         }
       }
-
-      buffsByActor.push(buffsByFight);
     }
-
-    buffsByActors.push(buffsByActor);
   }
 
-  return { fights, actors, buffsByActors };
+  return { fights, actors };
 }
 
 export default { validateCode, getBuffsAndConsummables };
